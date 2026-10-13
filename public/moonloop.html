@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MOONLOOP: STRANDED — Lunar Survival Simulation</title>
+  <meta name="description" content="An interactive lunar survival simulation. Keep your crew of four astronauts alive for 14 days until rescue arrives." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; }
+    body { background: #070b14; color: #f1f5f9; font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    @keyframes ping { 75%,100%{transform:scale(2);opacity:0;} }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.5;} }
+    @keyframes bounce { 0%,100%{transform:translateY(-25%);animation-timing-function:cubic-bezier(.8,0,1,1);} 50%{transform:none;animation-timing-function:cubic-bezier(0,0,.2,1);} }
+    .animate-ping { animation: ping 1s cubic-bezier(0,0,.2,1) infinite; }
+    .animate-pulse { animation: pulse 2s cubic-bezier(.4,0,.6,1) infinite; }
+    .animate-bounce { animation: bounce 1s infinite; }
+    .scanline::after { content:''; position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.04) 2px,rgba(0,0,0,0.04) 4px); pointer-events:none; z-index:9999; }
+    .game-wrapper { min-height:100vh; background:#070b14; display:flex; flex-direction:column; position:relative; }
+    .bg-ambient { position:absolute; inset:0; background:radial-gradient(ellipse at top,rgba(8,51,68,0.25) 0%,rgba(2,6,23,0.9) 50%,#070b14 100%); pointer-events:none; }
+    .game-main { flex:1; padding:1rem; display:grid; grid-template-columns:1fr; gap:1rem; max-width:1600px; width:100%; margin:0 auto; position:relative; z-index:10; }
+    @media (min-width:1024px) { .game-main { grid-template-columns:3fr 6fr 3fr; } }
+    .game-bottom { padding:0 1rem 1rem; max-width:1600px; width:100%; margin:0 auto; position:relative; z-index:10; }
+    .panel { background:rgba(15,23,42,0.6); border:1px solid #1e293b; border-radius:0.75rem; padding:1rem; backdrop-filter:blur(8px); display:flex; flex-direction:column; }
+    .panel-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; padding-bottom:0.5rem; border-bottom:1px solid #1e293b; font-family:'Space Mono',monospace; font-size:0.7rem; color:#00f0ff; }
+    .top-nav { background:rgba(15,23,42,0.92); border-bottom:1px solid #1e293b; padding:0.75rem 1rem; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.75rem; backdrop-filter:blur(8px); position:sticky; top:0; z-index:30; }
+    .nav-ping { width:0.75rem; height:0.75rem; background:#00f0ff; border-radius:50%; animation:ping 1s cubic-bezier(0,0,.2,1) infinite; }
+    .nav-title { font-family:'Space Mono',monospace; font-weight:700; font-size:1.1rem; color:#fff; letter-spacing:0.1em; }
+    .nav-badge { background:rgba(2,6,23,0.8); border:1px solid #1e293b; border-radius:0.375rem; padding:0.25rem 0.625rem; font-family:'Space Mono',monospace; font-size:0.65rem; display:flex; align-items:center; gap:0.375rem; }
+    .status-stable { background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); color:#34d399; border-radius:0.375rem; padding:0.25rem 0.625rem; font-family:'Space Mono',monospace; font-size:0.65rem; display:flex; align-items:center; gap:0.375rem; }
+    .status-warning { background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.4); color:#fbbf24; border-radius:0.375rem; padding:0.25rem 0.625rem; font-family:'Space Mono',monospace; font-size:0.65rem; display:flex; align-items:center; gap:0.375rem; }
+    .status-critical { background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); color:#f87171; border-radius:0.375rem; padding:0.25rem 0.625rem; font-family:'Space Mono',monospace; font-size:0.65rem; display:flex; align-items:center; gap:0.375rem; animation:pulse 2s infinite; }
+    .icon-btn { padding:0.4rem; background:#1e293b; border:1px solid #334155; border-radius:0.375rem; color:#cbd5e1; cursor:pointer; display:flex; align-items:center; transition:all 0.15s; }
+    .icon-btn:hover { background:#334155; color:#fff; }
+    .resource-bar { background:rgba(2,6,23,0.6); padding:0.75rem; border-radius:0.5rem; border:1px solid rgba(30,41,59,0.8); margin-bottom:0.625rem; }
+    .bar-track { width:100%; background:#0f172a; height:0.625rem; border-radius:9999px; overflow:hidden; border:1px solid #1e293b; }
+    .bar-fill { height:100%; border-radius:9999px; transition:width 0.5s ease; }
+    .crew-card { background:rgba(2,6,23,0.8); padding:0.5rem; border-radius:0.375rem; border:1px solid rgba(30,41,59,0.6); display:flex; align-items:center; justify-content:space-between; font-family:'Space Mono',monospace; font-size:0.65rem; margin-bottom:0.5rem; }
+    .health-healthy { background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.35); color:#34d399; padding:0.1rem 0.375rem; border-radius:0.25rem; font-size:0.6rem; }
+    .health-fatigued { background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.35); color:#fbbf24; padding:0.1rem 0.375rem; border-radius:0.25rem; font-size:0.6rem; }
+    .health-critical { background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.35); color:#f87171; padding:0.1rem 0.375rem; border-radius:0.25rem; font-size:0.6rem; animation:pulse 2s infinite; }
+    .action-card { padding:0.75rem; border-radius:0.5rem; border:1px solid #1e293b; background:rgba(2,6,23,0.8); margin-bottom:0.625rem; transition:all 0.2s; }
+    .action-card.recommended { background:rgba(0,240,255,0.05); border-color:rgba(0,240,255,0.5); box-shadow:0 0 15px rgba(0,240,255,0.12); }
+    .advisor-box { background:rgba(8,51,68,0.3); border:1px solid rgba(0,240,255,0.35); border-radius:0.5rem; padding:0.875rem; margin-bottom:1rem; }
+    .emergency-box { padding:1rem; border-radius:0.75rem; backdrop-filter:blur(8px); }
+    .emergency-active { background:rgba(69,10,10,0.25); border:1px solid rgba(239,68,68,0.45); }
+    .emergency-stable { background:rgba(8,51,68,0.25); border:1px solid rgba(0,240,255,0.35); }
+    .sys-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.5rem; margin-top:0.5rem; font-family:'Space Mono',monospace; font-size:0.65rem; }
+    .sys-chip { background:rgba(2,6,23,0.8); padding:0.375rem 0.5rem; border-radius:0.375rem; border:1px solid #1e293b; display:flex; align-items:center; justify-content:space-between; }
+    .bottom-panel { background:rgba(15,23,42,0.6); border:1px solid #1e293b; border-radius:0.75rem; padding:1rem; display:flex; flex-wrap:wrap; align-items:center; gap:1rem; backdrop-filter:blur(8px); }
+    .btn-advance { background:linear-gradient(to right,#00f0ff,#3b82f6); color:#020617; font-family:'Space Mono',monospace; font-weight:900; font-size:0.85rem; letter-spacing:0.08em; padding:1rem 1.5rem; border:none; border-radius:0.75rem; cursor:pointer; box-shadow:0 0 25px rgba(0,240,255,0.35); transition:all 0.2s; display:flex; align-items:center; gap:0.75rem; white-space:nowrap; }
+    .btn-advance:hover { box-shadow:0 0 35px rgba(0,240,255,0.55); transform:translateY(-1px); }
+    .event-log { flex:1; min-width:200px; background:rgba(2,6,23,0.8); border:1px solid #1e293b; border-radius:0.5rem; padding:0.75rem; height:5rem; display:flex; flex-direction:column; overflow:hidden; }
+    .log-entry { display:flex; align-items:center; gap:0.5rem; font-family:'Space Mono',monospace; font-size:0.65rem; color:#cbd5e1; margin-bottom:0.2rem; }
+    .intro-wrapper { min-height:100vh; background:#070b14; display:flex; align-items:center; justify-content:center; padding:1.5rem; position:relative; overflow:hidden; }
+    .intro-card { max-width:48rem; width:100%; background:rgba(15,23,42,0.85); border:1px solid rgba(0,240,255,0.25); border-radius:1rem; padding:2rem; box-shadow:0 0 60px rgba(0,240,255,0.1); position:relative; z-index:10; backdrop-filter:blur(12px); }
+    .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:2rem; }
+    @media(min-width:640px){ .stat-grid { grid-template-columns:repeat(4,1fr); } }
+    .stat-box { background:rgba(2,6,23,0.6); padding:0.75rem; border-radius:0.375rem; border:1px solid #1e293b; font-family:'Space Mono',monospace; }
+    .btn-start { padding:1rem 2rem; background:#00f0ff; color:#020617; font-family:'Space Mono',monospace; font-weight:700; letter-spacing:0.1em; font-size:0.9rem; border:none; border-radius:0.5rem; cursor:pointer; box-shadow:0 0 25px rgba(0,240,255,0.4); transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:0.75rem; }
+    .btn-start:hover { background:#67e8f9; transform:translateY(-1px); }
+    .gameover-wrapper { min-height:100vh; background:#070b14; display:flex; align-items:center; justify-content:center; padding:1.5rem; position:relative; overflow:hidden; }
+    .gameover-card { max-width:40rem; width:100%; background:rgba(15,23,42,0.92); border-radius:1rem; padding:2rem; position:relative; z-index:10; backdrop-filter:blur(12px); }
+    .gameover-victory { border:1px solid rgba(16,185,129,0.4); box-shadow:0 0 60px rgba(16,185,129,0.15); }
+    .gameover-defeat { border:1px solid rgba(239,68,68,0.4); box-shadow:0 0 60px rgba(239,68,68,0.15); }
+    .debrief-box { background:rgba(2,6,23,0.8); padding:1rem; border-radius:0.5rem; border:1px solid #1e293b; margin-bottom:2rem; font-family:'Space Mono',monospace; }
+    .debrief-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:1rem; font-size:0.7rem; }
+    @media(min-width:480px){ .debrief-grid { grid-template-columns:repeat(4,1fr); } }
+    .btn-restart { padding:1rem 2rem; background:#00f0ff; color:#020617; font-family:'Space Mono',monospace; font-weight:700; letter-spacing:0.1em; border:none; border-radius:0.5rem; cursor:pointer; box-shadow:0 0 20px rgba(0,240,255,0.4); transition:all 0.2s; display:flex; align-items:center; gap:0.75rem; }
+    .btn-restart:hover { background:#67e8f9; transform:translateY(-1px); }
+    .btn-execute { background:#00f0ff; color:#020617; font-family:'Space Mono',monospace; font-size:0.7rem; font-weight:700; padding:0.375rem 0.75rem; border:none; border-radius:0.375rem; cursor:pointer; box-shadow:0 0 10px rgba(0,240,255,0.3); transition:all 0.15s; }
+    .btn-execute:hover { background:#67e8f9; }
+    .btn-disabled { background:#1e293b; color:#475569; font-family:'Space Mono',monospace; font-size:0.65rem; font-weight:700; padding:0.375rem 0.75rem; border:1px solid #334155; border-radius:0.375rem; cursor:not-allowed; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+// SVG Icon component
+const IC = ({ n, s=16, c='currentColor' }) => {
+  const paths = {
+    radio: <><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></>,
+    act: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>,
+    arr: <><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>,
+    drop: <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>,
+    wind: <><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></>,
+    uten: <><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></>,
+    zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
+    shld: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>,
+    hrt: <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>,
+    rot: <><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.01"/></>,
+    atr: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
+    aoct: <><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>,
+    chk: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
+    shal: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>,
+    play: null,
+    term: <><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></>,
+    troph: <><polyline points="8 21 16 21"/><line x1="12" y1="17" x2="12" y2="21"/><path d="M7 4H17l-1 7a5 5 0 0 1-10 0z"/><path d="M5 9H3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M19 9h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></>,
+    award: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
+  };
+  if (n === 'play') return <svg width={s} height={s} viewBox="0 0 24 24" fill={c} stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
+  return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{paths[n]}</svg>;
+};
+
+// ── GAME ENGINE ──
+const INITIAL_STATE = {
+  screen:'INTRO',day:1,rescueEta:14,crewCount:4,status:'STABLE',
+  water:72,oxygen:84,food:78,power:66,habitatPressure:92,crewHealth:95,spareParts:3,
+  habitatStatus:'DAMAGED',waterRecycling:'DEGRADED',solarArray:'PARTIALLY FUNCTIONAL',
+  oxygenLeak:true,pressureLeak:false,
+  activeEmergencyId:'oxygen_leak_initial',
+  activeEmergencyDescription:'Emergency seal breach detected in Sector 3 habitat airlock wall. Oxygen is venting into the lunar exosphere.',
+  activeEmergencyEffects:'Oxygen depletes 1.5x faster until sealed.',
+  conservationActive:false,rationingActive:false,medicalCareActive:false,
+  crew:[
+    {id:'1',name:'Commander Alex Vance',role:'Mission Commander',status:'HEALTHY',health:98},
+    {id:'2',name:'Dr. Elena Rostova',role:'Systems Engineer',status:'HEALTHY',health:96},
+    {id:'3',name:'Marcus Chen',role:'Medical Officer',status:'HEALTHY',health:95},
+    {id:'4',name:'Suki Tanaka',role:'Comms Specialist',status:'HEALTHY',health:93},
+  ],
+  logs:[
+    {day:1,title:'EMERGENCY HABITAT REACHED',description:'LTV failure stranded crew. Rescue in 14 days.',type:'WARNING'},
+    {day:1,title:'OXYGEN LEAK DETECTED',description:'Sector 3 airlock seal degraded. Bleed-off active.',type:'CRITICAL'}
+  ],
+  stats:{repairsCompleted:0,emergenciesResolved:0,decisionsMade:0}
+};
+
+const EMERGENCIES = [
+  {id:'solar_storm',triggerDay:3,apply:s=>({...s,power:Math.max(0,s.power-15),habitatStatus:'DAMAGED',activeEmergencyId:'solar_storm',activeEmergencyDescription:'Solar Radiation Storm active. Power grid under high stress.',activeEmergencyEffects:'Power generation reduced. Repair solar array to stabilize.',logs:[{day:s.day,title:'SOLAR RADIATION STORM',description:'Coronal mass ejection impacts lunar array.',type:'CRITICAL'},...s.logs]})},
+  {id:'water_pump_failure',triggerDay:6,apply:s=>({...s,waterRecycling:'FAILED',activeEmergencyId:'water_pump_failure',activeEmergencyDescription:'Water recycling turbine seized. Daily recovery offline.',activeEmergencyEffects:'Water depletion doubled unless repaired.',logs:[{day:s.day,title:'WATER RECYCLING FAILURE',description:'Filtration turbine seized.',type:'CRITICAL'},...s.logs]})},
+  {id:'pressure_seal_rupture',triggerDay:9,apply:s=>({...s,pressureLeak:true,habitatPressure:Math.max(0,s.habitatPressure-12),activeEmergencyId:'pressure_seal_rupture',activeEmergencyDescription:'Viewport seal micro-fracture. Cabin pressure bleeding off.',activeEmergencyEffects:'Pressure decreases daily until patched.',logs:[{day:s.day,title:'PRESSURE SEAL RUPTURE',description:'Command module viewport micro-fracture detected.',type:'CRITICAL'},...s.logs]})},
+  {id:'rescue_delay',triggerDay:11,apply:s=>({...s,rescueEta:s.rescueEta+3,logs:[{day:s.day,title:'RESCUE APPROACH DELAYED',description:'Mission Control: Rescue delayed 3 days.',type:'WARNING'},...s.logs]})},
+];
+
+const ACTIONS = [
+  {id:'conserve_power',title:'Emergency Power Conservation',description:'Shut down non-essential systems, dim lighting, cycle life-support heaters.',cost:{},benefit:'Halves daily power consumption.',isAvailable:s=>!s.conservationActive,disabledReason:()=>'Already Active',execute:s=>({...s,conservationActive:true,power:Math.min(100,s.power+5),stats:{...s.stats,decisionsMade:s.stats.decisionsMade+1},logs:[{day:s.day,title:'EMERGENCY CONSERVATION ENGAGED',description:'Power conservation active.',type:'INFO'},...s.logs]})},
+  {id:'repair_solar',title:'Repair Solar Array',description:'EVA spacewalk to clean photovoltaic panels and replace fried regulator circuits.',cost:{spareParts:1},benefit:'Restores solar array to OPTIMAL generation.',isAvailable:s=>s.spareParts>=1&&s.solarArray!=='OPTIMAL',disabledReason:s=>s.spareParts<1?'Requires 1 Part':'Already Optimal',execute:s=>({...s,spareParts:s.spareParts-1,solarArray:'OPTIMAL',power:Math.min(100,s.power+25),stats:{...s.stats,repairsCompleted:s.stats.repairsCompleted+1,decisionsMade:s.stats.decisionsMade+1},logs:[{day:s.day,title:'SOLAR ARRAY REPAIRED',description:'Panels cleaned, regulator replaced.',type:'SUCCESS'},...s.logs]})},
+  {id:'repair_recycling',title:'Repair Water Recycling',description:'Overhaul filtration turbine and flush particulate clogs.',cost:{spareParts:1},benefit:'Restores full water recycling efficiency.',isAvailable:s=>s.spareParts>=1&&s.waterRecycling!=='FUNCTIONAL',disabledReason:s=>s.spareParts<1?'Requires 1 Part':'Already Functional',execute:s=>({...s,spareParts:s.spareParts-1,waterRecycling:'FUNCTIONAL',water:Math.min(100,s.water+15),stats:{...s.stats,repairsCompleted:s.stats.repairsCompleted+1,decisionsMade:s.stats.decisionsMade+1},logs:[{day:s.day,title:'WATER RECYCLING REPAIRED',description:'Recovery at 100%.',type:'SUCCESS'},...s.logs]})},
+  {id:'repair_oxygen_leak',title:'Seal Oxygen / Pressure Leak',description:'Apply polymer resin patch over airlock or viewport fractures.',cost:{spareParts:1},benefit:'Stops active oxygen bleed or pressure drop immediately.',isAvailable:s=>s.spareParts>=1&&(s.oxygenLeak||s.pressureLeak),disabledReason:s=>s.spareParts<1?'Requires 1 Part':'No Active Leaks',execute:s=>({...s,spareParts:s.spareParts-1,oxygenLeak:false,pressureLeak:false,activeEmergencyId:s.activeEmergencyId==='oxygen_leak_initial'?null:s.activeEmergencyId,activeEmergencyDescription:s.activeEmergencyId==='oxygen_leak_initial'?'All habitat systems stable.':s.activeEmergencyDescription,stats:{...s.stats,repairsCompleted:s.stats.repairsCompleted+1,emergenciesResolved:s.stats.emergenciesResolved+1,decisionsMade:s.stats.decisionsMade+1},logs:[{day:s.day,title:'HULL LEAK SEALED',description:'Polymer patch cured. Pressure and oxygen stabilized.',type:'SUCCESS'},...s.logs]})},
+  {id:'ration_supplies',title:'Enforce Strict Rationing',description:'Reduce daily caloric and water intake to minimum survival thresholds.',cost:{},benefit:'Reduces food and water consumption by 40%.',isAvailable:s=>!s.rationingActive,disabledReason:()=>'Already Active',execute:s=>({...s,rationingActive:true,stats:{...s.stats,decisionsMade:s.stats.decisionsMade+1},logs:[{day:s.day,title:'STRICT RATIONING ENFORCED',description:'Crew on rigorous restriction.',type:'INFO'},...s.logs]})},
+  {id:'medical_care',title:'Conduct Crew Medical Triage',description:'Administer electrolyte supplements and therapeutic rest.',cost:{power:10},benefit:'Restores crew health by +8 points.',isAvailable:s=>s.power>=10&&s.crewHealth<95,disabledReason:s=>s.power<10?'Requires 10 Power':'Health Optimal',execute:s=>({...s,power:s.power-10,crewHealth:Math.min(100,s.crewHealth+8),crew:s.crew.map(c=>({...c,health:Math.min(100,c.health+8),status:c.health+8>80?'HEALTHY':c.health+8>50?'FATIGUED':'CRITICAL'})),stats:{...s.stats,decisionsMade:s.stats.decisionsMade+1},logs:[{day:s.day,title:'MEDICAL TRIAGE ADMINISTERED',description:'Electrolyte therapy administered.',type:'SUCCESS'},...s.logs]})},
+  {id:'inspect_systems',title:'Deep System Diagnostics',description:'Full telemetry sweep to discover faults or salvage spare parts.',cost:{},benefit:'60% chance to recover 1 spare part.',isAvailable:s=>s.power>=5,disabledReason:()=>'Requires 5 Power',execute:s=>{const f=Math.random()<0.6;return{...s,power:s.power-5,spareParts:f?s.spareParts+1:s.spareParts,stats:{...s.stats,decisionsMade:s.stats.decisionsMade+1},logs:[{day:s.day,title:'DIAGNOSTIC SWEEP COMPLETED',description:f?'Salvaged 1 spare part!':'All circuits nominal.',type:f?'SUCCESS':'INFO'},...s.logs]};}},
+];
+
+function advanceDay(state) {
+  const nextDay=state.day+1, nextEta=Math.max(0,state.rescueEta-1);
+  const ev=EMERGENCIES.find(e=>e.triggerDay===nextDay);
+  let s=ev?ev.apply({...state,day:nextDay,rescueEta:nextEta}):{...state,day:nextDay,rescueEta:nextEta};
+  const pDrain=s.conservationActive?4:8, sGen=s.solarArray==='OPTIMAL'?14:s.solarArray==='PARTIALLY FUNCTIONAL'?8:4;
+  let nP=Math.max(0,Math.min(100,s.power+sGen-pDrain));
+  const wCons=s.rationingActive?3:6, rOut=s.waterRecycling==='FUNCTIONAL'?5:s.waterRecycling==='DEGRADED'?2:0, eRec=nP<30?Math.floor(rOut/2):rOut;
+  let nW=Math.max(0,Math.min(100,s.water+eRec-wCons));
+  let nO=Math.max(0,Math.min(100,s.oxygen+(nP>20?6:2)-5-(s.oxygenLeak?8:0)));
+  let nF=Math.max(0,Math.min(100,s.food-(s.rationingActive?3:5)));
+  let nPr=s.pressureLeak?Math.max(0,s.habitatPressure-8):s.habitatPressure;
+  let hD=0;
+  if(nW<25)hD-=8; if(nO<25)hD-=12; if(nF<20)hD-=5; if(nPr<40)hD-=10; if(s.rationingActive&&nextDay%2===0)hD-=2;
+  let nH=Math.max(0,Math.min(100,s.crewHealth+hD));
+  const uCrew=s.crew.map(c=>{const mh=Math.max(0,Math.min(100,c.health+hD));return{...c,health:mh,status:mh>75?'HEALTHY':mh>40?'FATIGUED':mh>15?'EXHAUSTED':'CRITICAL'};});
+  let ms='STABLE';
+  if(nW<=15||nO<=15||nF<=10||nPr<=20||nH<=15)ms='CRITICAL';
+  else if(nW<=35||nO<=40||nF<=30||nH<=60||s.activeEmergencyId)ms='WARNING';
+  const base={...s,water:nW,oxygen:nO,food:nF,power:nP,habitatPressure:nPr,crewHealth:nH,crew:uCrew};
+  if(nextEta===0){
+    return nH>20&&nO>10&&nW>10
+      ?{...base,screen:'VICTORY',status:'RESCUED',logs:[{day:nextDay,title:'RESCUE SHIP ARRIVED',description:'All crew safely evacuated.',type:'SUCCESS'},...s.logs]}
+      :{...base,screen:'DEFEAT',status:'FAILED',logs:[{day:nextDay,title:'RESCUE TOO LATE',description:'Life support collapsed before rescue.',type:'CRITICAL'},...s.logs]};
+  }
+  if(nO===0||nPr===0||nH===0||nW===0)return{...base,screen:'DEFEAT',status:'FAILED',logs:[{day:nextDay,title:'CATASTROPHIC FAILURE',description:'Life support depleted.',type:'CRITICAL'},...s.logs]};
+  return{...base,status:ms,logs:[{day:nextDay,title:`MISSION DAY ${nextDay} LOG`,description:`Water:${nW}% O2:${nO}% Power:${nP}%`,type:'INFO'},...s.logs]};
+}
+
+// ── COMPONENTS ──
+function Bar({label,val,unit,ic,icColor}) {
+  const isCrit=val<=20, isLow=val<=40&&val>20;
+  const barColor=isCrit?'#ef4444':isLow?'#f59e0b':'#00f0ff';
+  const statusText=isCrit?'CRITICAL':isLow?'LOW':'NORMAL';
+  const statusColor=isCrit?'#f87171':isLow?'#fbbf24':'#34d399';
+  return (
+    <div className="resource-bar">
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'0.375rem',fontFamily:'Space Mono,monospace',fontSize:'0.65rem'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'0.5rem',color:'#cbd5e1',fontWeight:600}}>
+          <IC n={ic} s={14} c={icColor}/>{label}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
+          <span style={{color:statusColor,fontWeight:700}}>{statusText}</span>
+          <span style={{color:'#fff',fontWeight:700,fontSize:'0.7rem'}}>{val}{unit}</span>
+        </div>
+      </div>
+      <div className="bar-track">
+        <div className="bar-fill" style={{width:`${Math.max(0,Math.min(100,val))}%`,background:barColor,...(isCrit?{animation:'pulse 2s infinite'}:{})}}/>
+      </div>
+    </div>
+  );
+}
+
+function LeftPanel({state}) {
+  return (
+    <div className="panel" style={{height:'100%'}}>
+      <div className="panel-header"><span>SURVIVAL TELEMETRY</span><span className="animate-pulse">● LIVE</span></div>
+      <div style={{flex:1,overflowY:'auto'}}>
+        <Bar label="Water Reserves" val={state.water} unit="%" ic="drop" icColor="#00f0ff"/>
+        <Bar label="Oxygen Level" val={state.oxygen} unit="%" ic="wind" icColor="#00f0ff"/>
+        <Bar label="Ration Stores" val={state.food} unit="%" ic="uten" icColor="#fbbf24"/>
+        <Bar label="Power Grid" val={state.power} unit="%" ic="zap" icColor="#facc15"/>
+        <Bar label="Habitat Pressure" val={state.habitatPressure} unit="%" ic="shld" icColor="#34d399"/>
+        <Bar label="Crew Health" val={state.crewHealth} unit="%" ic="hrt" icColor="#fb7185"/>
+      </div>
+      <div style={{marginTop:'1rem',paddingTop:'0.75rem',borderTop:'1px solid rgba(30,41,59,0.8)'}}>
+        <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.65rem',color:'#94a3b8',marginBottom:'0.5rem'}}>CREW STATUS</div>
+        {state.crew.map(m=>{
+          const cls=m.status==='HEALTHY'?'health-healthy':m.status==='FATIGUED'?'health-fatigued':'health-critical';
+          return <div className="crew-card" key={m.id}>
+            <div>
+              <div style={{color:'#e2e8f0',fontWeight:600,fontSize:'0.7rem'}}>{m.name}</div>
+              <div style={{color:'#475569',fontSize:'0.6rem'}}>{m.role}</div>
+            </div>
+            <span className={cls}>{m.status} ({m.health}%)</span>
+          </div>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CenterPanel({state}) {
+  const leaking=state.oxygenLeak||state.pressureLeak||state.waterRecycling==='FAILED';
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%',gap:'1rem'}}>
+      <div className="panel" style={{flex:1,position:'relative',minHeight:280,alignItems:'center',justifyContent:'center'}}>
+        <div style={{position:'absolute',top:'1rem',right:'1.5rem',display:'flex',alignItems:'center',gap:'0.5rem',fontFamily:'Space Mono,monospace',fontSize:'0.6rem',color:'#94a3b8'}}>
+          <span>EARTH ORBIT</span>
+          <div style={{width:24,height:24,borderRadius:'50%',background:'linear-gradient(135deg,#1d4ed8,#67e8f9)',boxShadow:'0 0 15px rgba(0,150,255,0.4)'}}/>
+        </div>
+        <div style={{position:'absolute',top:'1rem',left:'1.5rem',fontFamily:'Space Mono,monospace',fontSize:'0.6rem'}}>
+          <div style={{color:'#00f0ff'}}>MARE TRANQUILLITATIS</div>
+          <div style={{color:'#475569'}}>SECTOR 3 HABITAT</div>
+        </div>
+        <div style={{width:'100%',maxWidth:400,height:200,margin:'auto'}}>
+          <svg viewBox="0 0 500 300" style={{width:'100%',height:'100%',filter:'drop-shadow(0 0 20px rgba(0,240,255,0.15))'}}>
+            <path d="M 0 240 Q 250 260 500 240 L 500 300 L 0 300 Z" fill="#1e293b" opacity="0.6"/>
+            <path d="M 0 240 Q 250 260 500 240" stroke="#334155" strokeWidth="3" fill="none"/>
+            {[60,350].map((x,i)=><g key={i} transform={`translate(${x},140)`}>
+              <rect x="0" y="0" width="90" height="45" rx="4" fill="#0f172a" stroke="#00f0ff" strokeWidth="1.5"/>
+              <path d="M 30 0 L 30 45 M 60 0 L 60 45 M 0 15 L 90 15 M 0 30 L 90 30" stroke="#00f0ff" strokeWidth="0.75" opacity="0.4"/>
+              <text x={state.solarArray==='OPTIMAL'?"15":"6"} y="27" fill={state.solarArray==='OPTIMAL'?"#10b981":"#f59e0b"} fontSize="9" fontFamily="monospace">{state.solarArray==='OPTIMAL'?'OPTIMAL':'PART.FUNC'}</text>
+            </g>)}
+            <path d="M 175 180 C 175 110, 325 110, 325 180 Z" fill="#1e293b" stroke="#00f0ff" strokeWidth="2.5"/>
+            <rect x="160" y="180" width="180" height="60" rx="6" fill="#0f172a" stroke="#00f0ff" strokeWidth="2.5"/>
+            <rect x="225" y="195" width="50" height="45" rx="3" fill="#090d16" stroke="#334155" strokeWidth="2"/>
+            <circle cx="250" cy="217" r="12" fill="#1e293b" stroke="#00f0ff" strokeWidth="1.5"/>
+            {[210,250,290].map((cx,i)=><circle key={i} cx={cx} cy={i===1?140:150} r="10" fill="#00f0ff" opacity="0.7"/>)}
+            {leaking&&<g className="animate-pulse"><circle cx="250" cy="100" r="8" fill="#ef4444"/><text x="232" y="85" fill="#ef4444" fontSize="10" fontFamily="monospace" fontWeight="bold">ALERT</text></g>}
+          </svg>
+        </div>
+        <div className="sys-grid" style={{width:'100%',marginTop:'0.5rem'}}>
+          {[
+            {l:'SOLAR:',v:state.solarArray,c:state.solarArray==='OPTIMAL'?'#34d399':'#fbbf24'},
+            {l:'WATER REC:',v:state.waterRecycling,c:state.waterRecycling==='FUNCTIONAL'?'#34d399':state.waterRecycling==='DEGRADED'?'#fbbf24':'#f87171'},
+            {l:'HULL:',v:!state.oxygenLeak&&!state.pressureLeak?'SEALED':'BREACH',c:!state.oxygenLeak&&!state.pressureLeak?'#34d399':'#f87171'},
+          ].map(({l,v,c})=><div className="sys-chip" key={l}><span style={{color:'#94a3b8'}}>{l}</span><span style={{fontWeight:700,color:c,fontSize:'0.65rem',fontFamily:'Space Mono,monospace'}}>{v}</span></div>)}
+        </div>
+      </div>
+      <div className={`emergency-box ${state.activeEmergencyId?'emergency-active':'emergency-stable'}`}>
+        <div style={{display:'flex',alignItems:'center',gap:'0.5rem',fontFamily:'Space Mono,monospace',fontSize:'0.65rem',fontWeight:700,color:state.activeEmergencyId?'#f87171':'#00f0ff',marginBottom:'0.5rem'}}>
+          <IC n="atr" s={14} c={state.activeEmergencyId?'#f87171':'#00f0ff'}/>
+          {state.activeEmergencyId?'ACTIVE EMERGENCY REPORT':'MISSION SITUATION REPORT'}
+        </div>
+        <p style={{fontSize:'0.8rem',color:'#e2e8f0',lineHeight:1.6,marginBottom:'0.5rem'}}>{state.activeEmergencyDescription||'All habitat systems within nominal parameters.'}</p>
+        {state.activeEmergencyEffects&&<div style={{fontFamily:'Space Mono,monospace',fontSize:'0.65rem',color:'#fde68a',background:'rgba(120,53,15,0.2)',padding:'0.375rem 0.5rem',borderRadius:'0.25rem',border:'1px solid rgba(245,158,11,0.25)'}}><strong>IMPACT:</strong> {state.activeEmergencyEffects}</div>}
+      </div>
+    </div>
+  );
+}
+
+function RightPanel({state,onExecuteAction}) {
+  const getRec=()=>{
+    if(state.oxygenLeak&&state.spareParts>=1)return{priority:'CRITICAL OXYGEN PRIORITY',text:'Active hull leak bleeding oxygen. Seal immediately.',actionId:'repair_oxygen_leak'};
+    if(state.water<40&&state.waterRecycling!=='FUNCTIONAL'&&state.spareParts>=1)return{priority:'WATER RECYCLING PRIORITY',text:'Water dropping and recycling degraded. Overhaul turbine.',actionId:'repair_recycling'};
+    if(state.power<35&&state.solarArray!=='OPTIMAL'&&state.spareParts>=1)return{priority:'POWER CASCADE WARNING',text:'Low power reducing water recovery. Repair solar array.',actionId:'repair_solar'};
+    if(state.water<35&&!state.rationingActive)return{priority:'RATIONING ADVISORY',text:'Reserves constrained. Enforce rationing to extend supplies.',actionId:'ration_supplies'};
+    if(!state.conservationActive&&state.power<50)return{priority:'POWER CONSERVATION',text:'Enable power conservation to safeguard life support.',actionId:'conserve_power'};
+    return{priority:'OPERATIONAL STABILITY',text:'All systems nominal. Monitor telemetry until rescue arrives.',actionId:null};
+  };
+  const rec=getRec();
+  return (
+    <div className="panel" style={{height:'100%'}}>
+      <div className="panel-header"><span>MISSION INTELLIGENCE</span><span style={{color:'#94a3b8'}}>AI ADVISOR</span></div>
+      <div className="advisor-box">
+        <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.65rem',fontWeight:700,color:'#67e8f9',display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.5rem'}}>
+          <IC n="shal" s={14} c="#67e8f9"/>{rec.priority}
+        </div>
+        <p style={{fontSize:'0.75rem',color:'#cbd5e1',lineHeight:1.6}}>{rec.text}</p>
+      </div>
+      <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.65rem',color:'#94a3b8',marginBottom:'0.5rem'}}>AVAILABLE COMMAND ACTIONS</div>
+      <div style={{flex:1,overflowY:'auto'}}>
+        {ACTIONS.map(action=>{
+          const avail=action.isAvailable(state);
+          const reason=action.disabledReason?action.disabledReason(state):'';
+          const isRec=rec.actionId===action.id;
+          return (
+            <div className={`action-card${isRec?' recommended':''}`} key={action.id}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'0.25rem'}}>
+                <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.7rem',fontWeight:700,color:'#fff',display:'flex',alignItems:'center',gap:'0.375rem'}}>
+                  {isRec&&<span style={{width:8,height:8,borderRadius:'50%',background:'#00f0ff',display:'inline-block',animation:'ping 1s infinite'}}/>}
+                  {action.title}
+                </div>
+                <div style={{display:'flex',gap:'0.375rem'}}>
+                  {action.cost.spareParts&&<span style={{fontFamily:'Space Mono,monospace',fontSize:'0.6rem',color:'#fbbf24',background:'rgba(120,53,15,0.3)',border:'1px solid rgba(245,158,11,0.3)',padding:'0.125rem 0.5rem',borderRadius:'0.25rem'}}>COST: {action.cost.spareParts} PART</span>}
+                  {action.cost.power&&<span style={{fontFamily:'Space Mono,monospace',fontSize:'0.6rem',color:'#facc15',background:'rgba(66,32,6,0.3)',border:'1px solid rgba(250,204,21,0.3)',padding:'0.125rem 0.5rem',borderRadius:'0.25rem'}}>COST: {action.cost.power} PWR</span>}
+                </div>
+              </div>
+              <p style={{fontSize:'0.75rem',color:'#cbd5e1',marginBottom:'0.5rem',lineHeight:1.5}}>{action.description}</p>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',paddingTop:'0.5rem',borderTop:'1px solid rgba(30,41,59,0.6)'}}>
+                <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.6rem',color:'#34d399'}}>✓ {action.benefit}</div>
+                <button onClick={()=>onExecuteAction(action)} disabled={!avail} className={avail?'btn-execute':'btn-disabled'}>{avail?'EXECUTE':reason}</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BottomPanel({state,onAdvanceDay}) {
+  return (
+    <div className="bottom-panel">
+      <div style={{display:'flex',alignItems:'center',gap:'1rem'}}>
+        <button className="btn-advance" onClick={onAdvanceDay}>
+          <IC n="play" s={18} c="#020617"/>ADVANCE TO DAY {state.day+1}
+        </button>
+        <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.65rem',color:'#94a3b8'}}>
+          <div>SIMULATES 24H</div>
+          <div style={{color:'#00f0ff'}}>RESCUE IN {state.rescueEta} DAYS</div>
+        </div>
+      </div>
+      <div className="event-log">
+        <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.6rem',color:'#00f0ff',display:'flex',alignItems:'center',gap:'0.375rem',marginBottom:'0.375rem'}}>
+          <IC n="term" s={12}/>MISSION EVENT LOG
+        </div>
+        <div style={{overflowY:'auto',flex:1}}>
+          {state.logs.slice(0,4).map((log,i)=>{
+            const lc=log.type==='CRITICAL'?'#f87171':log.type==='WARNING'?'#fbbf24':log.type==='SUCCESS'?'#34d399':'#e2e8f0';
+            return <div className="log-entry" key={i}>
+              <span style={{color:'#00f0ff',fontWeight:700}}>D{log.day}:</span>
+              <span style={{color:lc,fontWeight:600,whiteSpace:'nowrap'}}>{log.title}</span>
+            </div>;
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TopNav({state,onRestart}) {
+  const badge=state.status==='STABLE'?<span className="status-stable"><IC n="chk" s={12}/>STABLE</span>
+    :state.status==='WARNING'?<span className="status-warning"><IC n="atr" s={12}/>WARNING</span>
+    :state.status==='CRITICAL'?<span className="status-critical"><IC n="aoct" s={12}/>CRITICAL</span>:null;
+  return (
+    <header className="top-nav">
+      <div style={{display:'flex',alignItems:'center',gap:'0.75rem'}}>
+        <div className="nav-ping"/>
+        <span className="nav-title">MOONLOOP: STRANDED</span>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:'0.5rem',flexWrap:'wrap'}}>
+        <div className="nav-badge"><span style={{color:'#94a3b8'}}>DAY:</span><span style={{color:'#00f0ff',fontWeight:700,fontSize:'0.8rem'}}>{state.day}/14</span></div>
+        <div className="nav-badge"><span style={{color:'#94a3b8'}}>ETA:</span><span style={{color:'#fbbf24',fontWeight:700,fontSize:'0.8rem'}}>{state.rescueEta}d</span></div>
+        <div className="nav-badge"><span style={{color:'#94a3b8'}}>CREW:</span><span style={{color:'#34d399',fontWeight:700,fontSize:'0.8rem'}}>{state.crewCount}</span></div>
+        <div className="nav-badge"><span style={{color:'#94a3b8'}}>PARTS:</span><span style={{color:'#00f0ff',fontWeight:700,fontSize:'0.8rem'}}>{state.spareParts}</span></div>
+        {badge}
+        <button className="icon-btn" onClick={onRestart} title="Restart Mission"><IC n="rot" s={15}/></button>
+      </div>
+    </header>
+  );
+}
+
+function IntroScreen({onStart}) {
+  return (
+    <div className="intro-wrapper scanline">
+      <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse at top,rgba(8,51,68,0.35) 0%,rgba(2,6,23,0.8) 50%,#070b14 100%)',pointerEvents:'none'}}/>
+      <div style={{position:'absolute',inset:0,backgroundImage:'linear-gradient(to right,rgba(30,41,59,0.08) 1px,transparent 1px),linear-gradient(to bottom,rgba(30,41,59,0.08) 1px,transparent 1px)',backgroundSize:'4rem 4rem',pointerEvents:'none'}}/>
+      <div className="intro-card">
+        <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'1.5rem'}}>
+          <div style={{padding:'0.625rem',background:'rgba(0,240,255,0.08)',border:'1px solid rgba(0,240,255,0.35)',borderRadius:'0.5rem',color:'#00f0ff',display:'flex'}}>
+            <IC n="radio" s={32} c="#00f0ff"/>
+          </div>
+          <div>
+            <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.65rem',letterSpacing:'0.15em',textTransform:'uppercase',color:'#00f0ff'}}>NASA / LUNAR COMMAND TELEMETRY</div>
+            <h1 style={{fontFamily:'Space Mono,monospace',fontSize:'clamp(1.5rem,4vw,2.25rem)',fontWeight:900,letterSpacing:'0.1em',color:'#fff'}}>MOONLOOP: STRANDED</h1>
+          </div>
+        </div>
+        <div style={{background:'rgba(8,51,68,0.2)',borderLeft:'4px solid #00f0ff',padding:'0.875rem',borderRadius:'0 0.5rem 0.5rem 0',marginBottom:'1.5rem',fontFamily:'Space Mono,monospace',fontSize:'0.8rem'}}>
+          <p style={{fontWeight:700,color:'#67e8f9',marginBottom:'0.25rem'}}>STRANDED LUNAR SURVIVAL SIMULATION</p>
+          <p style={{color:'#cbd5e1',fontStyle:'italic'}}>"Four astronauts. One damaged habitat. Rescue is 14 days away."</p>
+        </div>
+        <div style={{color:'#cbd5e1',fontSize:'0.875rem',lineHeight:1.75,marginBottom:'2rem'}}>
+          <p style={{marginBottom:'0.75rem'}}>The lunar transfer vehicle suffered a catastrophic descent engine failure in Mare Tranquillitatis. Your crew of four has reached the emergency habitat, but critical systems are severely damaged.</p>
+          <p>Mission Control confirms a rescue trajectory — ETA strictly <strong style={{color:'#00f0ff',fontFamily:'Space Mono,monospace'}}>14 days</strong>. Keep your crew alive.</p>
+        </div>
+        <div className="stat-grid">
+          {[{l:'CREW',v:'4 Astronauts',c:'#fff'},{l:'RESCUE ETA',v:'14 Days',c:'#00f0ff'},{l:'HABITAT',v:'DAMAGED',c:'#fbbf24'},{l:'SPARE PARTS',v:'3 Units',c:'#34d399'}].map(({l,v,c})=>(
+            <div className="stat-box" key={l}><div style={{fontSize:'0.6rem',color:'#475569',marginBottom:'0.25rem'}}>{l}</div><div style={{fontSize:'1rem',fontWeight:700,color:c}}>{v}</div></div>
+          ))}
+        </div>
+        <div style={{display:'flex',flexWrap:'wrap',alignItems:'center',justifyContent:'space-between',gap:'1rem',borderTop:'1px solid #1e293b',paddingTop:'1.5rem'}}>
+          <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.65rem',color:'#94a3b8',display:'flex',alignItems:'center',gap:'0.5rem'}}>
+            <IC n="act" s={13} c="#00f0ff"/>Simulation engine ready. No external dependencies.
+          </div>
+          <button className="btn-start" onClick={onStart}>BEGIN SURVIVAL <IC n="arr" s={18}/></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GameOverScreen({state,onRestart}) {
+  const win=state.screen==='VICTORY';
+  return (
+    <div className="gameover-wrapper scanline">
+      <div style={{position:'absolute',inset:0,background:win?'radial-gradient(ellipse at center,rgba(5,46,22,0.4),rgba(2,6,23,0.85),#070b14)':'radial-gradient(ellipse at center,rgba(69,10,10,0.4),rgba(2,6,23,0.85),#070b14)',pointerEvents:'none'}}/>
+      <div className={`gameover-card ${win?'gameover-victory':'gameover-defeat'}`}>
+        <div style={{display:'flex',alignItems:'center',gap:'1rem',marginBottom:'1.5rem'}}>
+          <div style={{padding:'0.75rem',background:win?'rgba(16,185,129,0.1)':'rgba(239,68,68,0.1)',border:win?'1px solid rgba(16,185,129,0.4)':'1px solid rgba(239,68,68,0.4)',borderRadius:'0.75rem',color:win?'#34d399':'#f87171',display:'flex'}}>
+            {win?<IC n="troph" s={40} c="#34d399"/>:<IC n="shal" s={40} c="#f87171"/>}
+          </div>
+          <div>
+            <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.65rem',letterSpacing:'0.15em',color:win?'#34d399':'#f87171'}}>{win?'MISSION ACCOMPLISHED':'CATASTROPHIC FAILURE'}</div>
+            <h1 style={{fontFamily:'Space Mono,monospace',fontSize:'clamp(1.2rem,3vw,1.75rem)',fontWeight:900,color:'#fff'}}>{win?'CREW RESCUED SUCCESSFULLY':'HABITAT COLLAPSED'}</h1>
+          </div>
+        </div>
+        <p style={{color:'#cbd5e1',fontSize:'0.875rem',lineHeight:1.75,marginBottom:'1.5rem'}}>
+          {win?`Commander, your leadership kept all four crew members alive through ${state.day} grueling lunar days. The ascent module rendezvoused with the rescue vehicle. All astronauts returning to Earth.`:`Despite your efforts, life support parameters collapsed. The harsh environment of Mare Tranquillitatis claimed the station before rescue arrived.`}
+        </p>
+        <div className="debrief-box">
+          <div style={{fontSize:'0.65rem',color:'#00f0ff',display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.75rem'}}><IC n="award" s={13}/>MISSION SURVIVAL DEBRIEF</div>
+          <div className="debrief-grid">
+            {[{l:'DAYS SURVIVED',v:state.day,c:'#fff'},{l:'REPAIRS',v:state.stats.repairsCompleted,c:'#34d399'},{l:'EMERGENCIES',v:state.stats.emergenciesResolved,c:'#00f0ff'},{l:'SURVIVORS',v:`${state.crew.filter(c=>c.health>0).length}/4`,c:state.crewHealth>20?'#34d399':'#f87171'}].map(({l,v,c})=>(
+              <div key={l}><div style={{color:'#475569',marginBottom:'0.25rem'}}>{l}</div><div style={{fontSize:'1.1rem',fontWeight:700,color:c}}>{v}</div></div>
+            ))}
+          </div>
+        </div>
+        <div style={{display:'flex',justifyContent:'flex-end'}}>
+          <button className="btn-restart" onClick={onRestart}><IC n="rot" s={17}/>START NEW MISSION</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [state,setState]=useState(()=>{
+    const saved=localStorage.getItem('moonloop_save');
+    if(saved){try{return JSON.parse(saved);}catch(e){}}
+    return INITIAL_STATE;
+  });
+  useEffect(()=>{
+    if(state.screen==='PLAYING')localStorage.setItem('moonloop_save',JSON.stringify(state));
+    else localStorage.removeItem('moonloop_save');
+  },[state]);
+  const handleStart=()=>setState({...INITIAL_STATE,screen:'PLAYING'});
+  const handleRestart=()=>{localStorage.removeItem('moonloop_save');setState(INITIAL_STATE);};
+  const handleAdvanceDay=()=>setState(prev=>advanceDay(prev));
+  const handleAction=action=>setState(prev=>action.execute(prev));
+
+  if(state.screen==='INTRO')return <IntroScreen onStart={handleStart}/>;
+  if(state.screen==='VICTORY'||state.screen==='DEFEAT')return <GameOverScreen state={state} onRestart={handleRestart}/>;
+
+  return (
+    <div className="game-wrapper scanline">
+      <div className="bg-ambient"/>
+      <TopNav state={state} onRestart={handleRestart}/>
+      <main className="game-main">
+        <div style={{display:'flex',flexDirection:'column'}}><LeftPanel state={state}/></div>
+        <div style={{display:'flex',flexDirection:'column'}}><CenterPanel state={state}/></div>
+        <div style={{display:'flex',flexDirection:'column'}}><RightPanel state={state} onExecuteAction={handleAction}/></div>
+      </main>
+      <div className="game-bottom"><BottomPanel state={state} onAdvanceDay={handleAdvanceDay}/></div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
